@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Anchored Tabs",
+  "version": "0.1.0",
+  "description": "Zen-style Essentials for Helium: closing a pinned or anchored grouped tab resets it to its anchor URL and hibernates it.",
+  "minimum_chrome_version": "116",
+  "permissions": ["tabs", "tabGroups", "storage", "contextMenus", "favicon"],
+  "background": { "service_worker": "src/background.js", "type": "module" },
+  "action": {
+    "default_title": "Anchored Tabs",
+    "default_popup": "src/popup.html",
+    "default_icon": { "16": "icons/16.png", "32": "icons/32.png" }
+  },
+  "options_ui": { "page": "src/options.html", "open_in_tab": true },
+  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "commands": {
+    "anchor-tab": {
+      "suggested_key": { "default": "Alt+Shift+A" },
+      "description": "Anchor this tab (pins it unless it's in a group)"
+    },
+    "set-anchor-url": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "Set this tab's anchor URL to the current page"
+    },
+    "reset-to-anchor": {
+      "suggested_key": { "default": "Alt+Shift+R" },
+      "description": "Go back to the anchor URL (keeps the tab open)"
+    },
+    "close-unanchor": {
+      "suggested_key": { "default": "Alt+Shift+W" },
+      "description": "Close the tab for real and remove its anchor"
+    }
+  }
+}

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Anchored Tabs</title>
+  <link rel="stylesheet" href="ui.css">
+  <style>
+    body { width: 340px; padding: 12px; }
+    .stack > * + * { margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
+    <h1 style="margin:0">Anchored Tabs</h1>
+    <span id="badge" class="badge">…</span>
+  </div>
+  <div id="current" class="small muted ellipsis"></div>
+
+  <section id="anchored" class="stack" hidden>
+    <label class="small muted" for="url">Anchor URL</label>
+    <div class="row">
+      <input id="url" type="text" class="grow" spellcheck="false">
+      <button id="save" class="primary">Save</button>
+    </div>
+    <div class="row">
+      <button id="useCurrent">Use this page</button>
+      <button id="reset">Go to anchor</button>
+      <button id="hibernate">Close &amp; hibernate</button>
+    </div>
+    <div class="row">
+      <button id="unanchor">Remove anchor</button>
+      <button id="closeForReal" class="danger">Close for real</button>
+    </div>
+  </section>
+
+  <section id="notAnchored" class="stack" hidden>
+    <p id="notAnchoredText" class="small"></p>
+    <button id="anchor" class="primary">Anchor this tab</button>
+  </section>
+
+  <div id="status" class="status"></div>
+  <div class="row" style="justify-content: flex-end; margin-top: 4px;">
+    <a href="#" id="options" class="small">All anchors &amp; settings</a>
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
