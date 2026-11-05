@@ -10,8 +10,6 @@ Pinned tabs, and tabs in groups that you choose to anchor, remember an **anchor 
 
 After a restart, anchored tabs are reset to their anchor URLs. Anchors whose tabs weren't restored are recreated, hibernated.
 
-This is a desktop extension. Helium has no mobile version.
-
 ## Install (Helium)
 
 1. Download or clone this repository.
