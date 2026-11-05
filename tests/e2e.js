@@ -134,6 +134,48 @@ async function waitFor(fn, ms = 20000) {
   const g = rg && rg.groupId !== -1 ? await ev((id) => chrome.tabGroups.get(id), rg.groupId) : null;
   check('last tab in group: group recreated with title/color', g && g.title === 'Work' && g.color === 'blue', g ? `${g.title}/${g.color}` : 'no group');
 
+  // ---- 7. New tab pages are never anchored
+  const blank = await newTab('chrome://newtab/', { pinned: true });
+  await sleep(1300);
+  ov = await call(ui, 'overview');
+  check('pinned new tab page is not anchored', !ov.anchors.some((a) => a.live?.tabId === blank.id));
+  const blankErr = await call(ui, 'anchorTab', { tabId: blank.id }).then(() => null, (e) => e.message);
+  check('anchoring a blank tab is refused', /Open a page/.test(blankErr || ''), blankErr || 'no error');
+  await remove(blank.id); await sleep(500);
+  check('blank pinned tab closes for real', !(await tabs(sw, {})).some((t) => t.id === blank.id || (t.pinned && t.url.startsWith('chrome://newtab'))));
+
+  // ---- 8. Options page: Pinned / Folders sections and the ⋯ menu
+  const tmp = await newTab(`${B}/tmp`, { pinned: true }); await loaded(tmp.id); await sleep(1300);
+  await ui.reload(); await ui.waitForSelector('#pinned .item');
+  const pinnedRows = await ui.locator('#pinned .item').count();
+  const folderHeads = await ui.locator('#folders h3').allTextContents();
+  const folderRows = await ui.locator('#folders .item').count();
+  check('options: pinned section lists pinned anchors', pinnedRows === 2, `rows=${pinnedRows}`);
+  check('options: folder section grouped under "Work"', folderHeads.length === 1 && folderHeads[0] === 'Work' && folderRows === 1, `${folderHeads} rows=${folderRows}`);
+  // Edit URL through the menu
+  const rowId = await ui.locator('#pinned .item', { hasText: '/c' }).first().getAttribute('data-id');
+  const row = ui.locator(`#pinned .item[data-id="${rowId}"]`);
+  await row.locator('.more').click();
+  check('options: ⋯ opens the menu', await ui.locator('#menu').evaluate((m) => m.matches(':popover-open')));
+  await ui.locator('#menu [role=menuitem]', { hasText: 'Edit URL' }).click();
+  await row.locator('.edit input').fill(`${B}/c2`);
+  await row.locator('.edit input').press('Enter');
+  await sleep(500);
+  ov = await call(ui, 'overview');
+  check('options: Edit URL saves the anchor', ov.anchors.some((a) => a.url === `${B}/c2`));
+  const c2 = ov.anchors.find((a) => a.url === `${B}/c2`);
+  await call(ui, 'setAnchorUrl', { anchorId: c2.id, url: `${B}/c` });
+  // Remove through the menu
+  await ui.reload(); await ui.waitForSelector('#pinned .item');
+  await ui.locator('#pinned .item', { hasText: '/tmp' }).locator('.more').click();
+  await ui.locator('#menu [role=menuitem]', { hasText: 'Remove anchor' }).click();
+  await sleep(500);
+  ov = await call(ui, 'overview');
+  check('options: Remove anchor removes it', !ov.anchors.some((a) => a.url === `${B}/tmp`));
+  check('options: list re-rendered without it', (await ui.locator('#pinned .item').count()) === 1);
+  await remove(tmp.id); await sleep(800);
+  check('un-anchored pinned tab closes for real', !(await tabs(sw, {})).some((t) => t.url === `${B}/tmp`));
+
   // ---- 4. Closing a normal tab must not land on a hibernated tab
   // Close every unpinned, ungrouped tab except one fresh tab, which we then close.
   for (const t of await tabs(sw, { windowId: win })) {

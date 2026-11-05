@@ -218,7 +218,7 @@ async function reconcile({ reset, recreateMissing }) {
     if (a) {
       s.tabMap[t.id] = a.id;
       if (reset && a.url && tabUrl(t) !== a.url) toReset.push([t, a]);
-    } else if (t.pinned ? s.settings.autoAnchorPinned : s.settings.autoAnchorGrouped) {
+    } else if ((t.pinned ? s.settings.autoAnchorPinned : s.settings.autoAnchorGrouped) && !isBlankUrl(tabUrl(t))) {
       createAnchor(s, t);
     }
   }
@@ -267,13 +267,12 @@ async function reconcile({ reset, recreateMissing }) {
 // Anchors
 // ---------------------------------------------------------------------------
 
+/** Callers make sure `url` is a real page (not the new tab page). */
 function createAnchor(s, tab, url = tabUrl(tab)) {
   const anchor = {
     id: crypto.randomUUID(),
     kind: tab.pinned ? 'pinned' : 'group',
-    // A tab that's still on the new tab page gets its URL from the first page
-    // it navigates to.
-    url: isBlankUrl(url) ? '' : url,
+    url,
     title: tab.title || '',
     favIconUrl: tab.favIconUrl || '',
     pos: { index: tab.index },
@@ -576,7 +575,10 @@ async function checkMembership(tabId) {
     if (tab.pinned) anchor.kind = 'pinned';
     else if (inGroup) anchor.kind = 'group';
     else removeAnchor(s, anchorId); // unpinned / ungrouped → a normal tab again
-  } else if (tab.pinned ? s.settings.autoAnchorPinned : inGroup && s.settings.autoAnchorGrouped) {
+  } else if (
+    (tab.pinned ? s.settings.autoAnchorPinned : inGroup && s.settings.autoAnchorGrouped) &&
+    !isBlankUrl(tabUrl(tab)) // a pinned new tab page isn't anchored
+  ) {
     createAnchor(s, tab);
   } else {
     return;
@@ -616,12 +618,7 @@ chrome.tabs.onRemoved.addListener((tabId, info) => {
 
     let newTabId = null;
     if (anchor) {
-      if (!anchor.url) {
-        removeAnchor(s, anchorId); // never got past the new tab page
-        await persistLocal();
-      } else {
-        newTabId = await recreate(s, anchor, info.windowId).catch((e) => log('recreate failed', e));
-      }
+      newTabId = await recreate(s, anchor, info.windowId).catch((e) => log('recreate failed', e));
     }
     if (wasActive && (anchor || s.settings.guardAllCloses)) {
       await fixActivation(s, {
@@ -667,10 +664,6 @@ chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
       s.sleeping[tabId] = Date.now();
     }
     const a = s.anchors[anchorIdFor(s, tabId)];
-    if (a && !a.url && info.url && !isBlankUrl(info.url)) {
-      a.url = info.url; // first real page of a new anchored tab becomes its anchor
-      await persistLocal();
-    }
     if (a && tracksAnchor) updateAnchorMeta(s, tab);
     if (s.sleeping[tabId] !== before) await persistSession();
   });
@@ -692,6 +685,7 @@ chrome.tabGroups.onUpdated.addListener(scheduleSnapshot);
 /** Anchor a tab. A grouped tab stays in its group; a normal tab gets pinned. */
 async function anchorTab(s, tabId, url) {
   let tab = await chrome.tabs.get(tabId);
+  if (isBlankUrl(url || tabUrl(tab))) throw new Error('Open a page in this tab first');
   if (!tab.pinned && tab.groupId === -1) tab = await chrome.tabs.update(tabId, { pinned: true });
   const existing = s.anchors[anchorIdFor(s, tabId)];
   if (existing) {

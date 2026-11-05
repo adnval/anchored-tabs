@@ -34,7 +34,6 @@ async function render() {
   if (anchor) {
     $('badge').textContent = anchor.kind === 'pinned' ? 'Anchored · pinned' : 'Anchored · group';
     if (document.activeElement !== $('url')) $('url').value = anchor.url;
-    $('url').placeholder = 'Set from the first page this tab opens';
   } else {
     $('badge').textContent = 'Not anchored';
     $('notAnchoredText').textContent = info.tab.grouped

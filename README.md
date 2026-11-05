@@ -23,12 +23,12 @@ This is a desktop extension. Helium has no mobile version.
 
 | What | How |
 |---|---|
-| Make an Essential | Pin a tab. It's anchored automatically at its current URL. |
+| Make an Essential | Pin a tab that has a page open. It's anchored automatically at its current URL. A pinned new tab page isn't anchored. |
 | Anchor a tab in a group | Toolbar popup → **Anchor this tab**, or right-click the page → *Anchor this tab*. It stays in its group. |
 | Change an anchor URL | Popup: edit the URL, or **Use this page**. Options page: edit any anchor. Right-click → *Set anchor URL to this page*. |
 | Go back to the anchor URL without closing | Popup → **Go to anchor**, or right-click → *Go back to anchor URL*. |
 | Close a tab permanently | Popup → **Close for real**, right-click → *Close tab for real*, or unpin / ungroup the tab and close it normally. |
-| See and manage all anchors | Popup → *All anchors & settings*. Includes export and import. |
+| See and manage all anchors | Popup → *All anchors & settings*. Anchors are listed under **Pinned** and **Folders** (one heading per tab group). Each row's ⋯ menu has Edit URL, Use current page, Show/Open tab and Remove anchor. Export and import are at the bottom. |
 
 Keyboard shortcuts are suggested as Alt+Shift+A (anchor), Alt+Shift+S (set URL to this page), Alt+Shift+R (go back to anchor) and Alt+Shift+W (close for real). The browser only assigns them if they don't clash with something else, so check or set them at `chrome://extensions/shortcuts`.
 
