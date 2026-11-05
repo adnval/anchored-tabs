@@ -68,4 +68,6 @@ This needs the `playwright` package with its Chromium. The test loads the extens
 - editing anchor URLs
 - restarts with and without session restore
 
+`node tests/stress.js` closes anchored tabs, normal tabs and windows hundreds of times. It checks that the extension's bookkeeping and service-worker heap stay flat.
+
 Playwright's Chromium build crashes on `chrome.tabs.discard`, so the test replaces that one call with a recorder.

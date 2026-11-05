@@ -257,7 +257,10 @@ async function reconcile({ reset, recreateMissing }) {
       .then(() => {
         if (!t.active) hibernateWhenLoaded(t.id);
       })
-      .catch(log);
+      .catch((e) => {
+        hibernating.delete(t.id);
+        log(e);
+      });
   }
   toHibernate.forEach((id) => hibernateWhenLoaded(id));
   log('reconciled', { matched: matched.size, missing: remaining.size, reset: toReset.length });
@@ -320,14 +323,24 @@ async function recreate(s, anchor, windowId) {
     }
     tab = await chrome.tabs.create({ windowId, url: anchor.url, active: false, index });
     register(s, tab.id, anchor.id);
-    if (groupId != null) {
-      await chrome.tabs.group({ groupId, tabIds: [tab.id] });
-    } else {
-      // The closed tab was the last one in its group, so the group is gone.
-      const gid = await chrome.tabs.group({ tabIds: [tab.id], createProperties: { windowId } });
-      await chrome.tabGroups
-        .update(gid, { title: pos.groupTitle || '', color: pos.groupColor || 'grey', collapsed: !!pos.groupCollapsed })
-        .catch(log);
+    try {
+      if (groupId != null) {
+        await chrome.tabs.group({ groupId, tabIds: [tab.id] });
+      } else {
+        // The closed tab was the last one in its group, so the group is gone.
+        const gid = await chrome.tabs.group({ tabIds: [tab.id], createProperties: { windowId } });
+        await chrome.tabGroups
+          .update(gid, { title: pos.groupTitle || '', color: pos.groupColor || 'grey', collapsed: !!pos.groupCollapsed })
+          .catch(log);
+      }
+    } catch (e) {
+      // Couldn't put it back in a folder: drop the stray tab. The anchor stays
+      // and can be reopened from the options page.
+      delete s.tabMap[tab.id];
+      delete s.sleeping[tab.id];
+      hibernating.delete(tab.id);
+      await chrome.tabs.remove(tab.id).catch(() => {});
+      throw e;
     }
   }
   scheduleSnapshot();
@@ -673,6 +686,15 @@ chrome.tabs.onReplaced.addListener((addedId, removedId) => {
   serial(async () => remapTab(await getState(), removedId, addedId));
 });
 
+chrome.windows.onRemoved.addListener((windowId) => {
+  serial(async () => {
+    const s = await getState();
+    delete s.active[windowId];
+    delete s.prevActive[windowId];
+    await persistSession();
+  });
+});
+
 chrome.tabs.onMoved.addListener(scheduleSnapshot);
 chrome.tabs.onAttached.addListener(scheduleSnapshot);
 chrome.tabs.onDetached.addListener(scheduleSnapshot);
@@ -803,6 +825,25 @@ const actions = {
     if (!['mru', 'browser'].includes(s.settings.afterClose)) s.settings.afterClose = DEFAULT_SETTINGS.afterClose;
     await persistLocal();
     return s.settings;
+  },
+
+  // Read-only counters used by tests/stress.js to check nothing piles up.
+  async debugStats(s) {
+    const size = (o) => Object.keys(o).length;
+    return {
+      tabs: (await chrome.tabs.query({})).length,
+      windows: (await chrome.windows.getAll()).length,
+      anchors: size(s.anchors),
+      tabMap: size(s.tabMap),
+      seen: size(s.seen),
+      sleeping: size(s.sleeping),
+      active: size(s.active),
+      prevActive: size(s.prevActive),
+      hibernating: hibernating.size,
+      waiters: waiters.length,
+      freeSlots: slots,
+      sessionBytes: await chrome.storage.session.getBytesInUse(),
+    };
   },
 
   async exportData(s) {
