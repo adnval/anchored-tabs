@@ -17,11 +17,7 @@
 <body>
 <main>
   <h1>Anchored Tabs</h1>
-  <p class="muted">Pinned tabs, and folder tabs you choose to anchor, keep an <b>anchor URL</b>. Closing one (<kbd>Ctrl</kbd>+<kbd>W</kbd>, middle-click, ×) resets it to that URL and hibernates it, and focus moves to a loaded tab instead.</p>
-
-  <h2>Pinned</h2>
-  <ul id="pinned" class="list" aria-label="Pinned anchors"></ul>
-  <p id="pinnedEmpty" class="empty" hidden>Pin a tab to add it here.</p>
+  <p class="muted">Folder tabs you anchor keep an <b>anchor URL</b>. Closing one (<kbd>Ctrl</kbd>+<kbd>W</kbd>, middle-click, ×) resets it to that URL and hibernates it, and focus moves to a loaded tab instead. Pinned tabs aren't handled here: Helium does this for them itself.</p>
 
   <h2>Folders</h2>
   <div id="folders"></div>
@@ -29,8 +25,6 @@
 
   <h2>Settings</h2>
   <form id="settings" class="settings">
-    <label><input type="checkbox" name="autoAnchorPinned">
-      <span>Anchor every pinned tab<span class="hint">Pinned tabs behave like Zen Essentials.</span></span></label>
     <label><input type="checkbox" name="autoAnchorGrouped">
       <span>Anchor every tab inside a folder<span class="hint">Off: anchor folder tabs one by one. On: links opened from a folder tab join the folder, so they become anchors too and won't really close.</span></span></label>
     <label><input type="checkbox" name="guardAllCloses">

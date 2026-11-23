@@ -32,15 +32,17 @@ async function render() {
   $('badge').classList.toggle('on', !!anchor);
 
   if (anchor) {
-    $('badge').textContent = anchor.kind === 'pinned' ? 'Anchored · pinned' : 'Anchored · group';
+    $('badge').textContent = 'Anchored';
     if (document.activeElement !== $('url')) $('url').value = anchor.url;
   } else {
     $('badge').textContent = 'Not anchored';
-    $('notAnchoredText').textContent = info.tab.grouped
-      ? 'This tab is in a group. Anchoring keeps it in the group and uses the current page as its anchor URL.'
+    const canAnchor = info.tab.grouped && !info.tab.pinned;
+    $('notAnchoredText').textContent = canAnchor
+      ? 'This tab is in a folder. Anchoring keeps it there and uses the current page as its anchor URL.'
       : info.tab.pinned
-        ? 'Auto-anchoring of pinned tabs is off. Anchor this tab to give it Essentials behavior.'
-        : 'This is a normal tab. Anchoring pins it and uses the current page as its anchor URL.';
+        ? 'Helium resets and unloads pinned tabs on close by itself, so they aren’t anchored here.'
+        : 'Only tabs in a folder can be anchored. Move this tab into a folder first.';
+    $('anchor').hidden = !canAnchor;
   }
 }
 

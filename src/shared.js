@@ -1,8 +1,6 @@
 // Shared helpers used by the service worker, popup and options page.
 
 export const DEFAULT_SETTINGS = Object.freeze({
-  // Every pinned tab is an anchor (Zen "Essentials").
-  autoAnchorPinned: true,
   // Every tab inside a tab group is an anchor. Off by default because links
   // opened from a grouped tab join its group automatically; anchor grouped
   // tabs explicitly instead.

@@ -87,10 +87,16 @@ async function devtools(extId) {
 
   const win = (await ev(() => chrome.tabs.query({ active: true })))[0].windowId;
   const home = await ev(([u, w]) => chrome.tabs.create({ url: u, windowId: w }), [`${B}/home`, win]);
-  await ev(([u, w]) => chrome.tabs.create({ url: u, windowId: w, pinned: true }), [`${B}/pinned`, win]);
+  // One anchored tab in a folder.
+  const f = await ev(([u, w]) => chrome.tabs.create({ url: u, windowId: w }), [`${B}/folder`, win]);
+  await sleep(800);
+  await ev((id) => chrome.tabs.group({ tabIds: [id] }), f.id);
+  await sleep(800);
+  await ui.evaluate((id) => import('./shared.js').then((m) => m.send('anchorTab', { tabId: id })), f.id);
   await sleep(1500);
 
-  const pinnedTab = async () => (await ev((w) => chrome.tabs.query({ pinned: true, windowId: w }), win))[0];
+  const folderTab = async () =>
+    (await ev((w) => chrome.tabs.query({ windowId: w }), win)).find((t) => t.groupId !== -1);
   const settle = async () => {
     for (let i = 0; i < 100; i++) {
       const s = await stats();
@@ -109,12 +115,12 @@ async function devtools(extId) {
 
   for (let round = 1; round <= ROUNDS; round++) {
     for (let i = 0; i < CYCLES; i++) {
-      // 1. Close the active anchored pinned tab → recreate + hibernate.
-      const p = await pinnedTab();
+      // 1. Close the active anchored folder tab → recreate + hibernate.
+      const p = await folderTab();
       await ev((id) => chrome.tabs.update(id, { active: true }), p.id);
       await ev((id) => chrome.tabs.remove(id), p.id);
       for (let k = 0; k < 50; k++) {
-        const q = await pinnedTab();
+        const q = await folderTab();
         if (q && q.id !== p.id) break;
         await sleep(20);
       }

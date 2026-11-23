@@ -240,11 +240,8 @@ async function render() {
   renderPending = false;
   const { settings, anchors } = await send('overview');
   const byPos = (x, y) => (x.pos?.index ?? 0) - (y.pos?.index ?? 0);
-  const pinned = anchors.filter((a) => a.kind === 'pinned').sort(byPos);
   const grouped = anchors.filter((a) => a.kind === 'group').sort(byPos);
 
-  $('pinned').replaceChildren(...pinned.map(renderItem));
-  $('pinnedEmpty').hidden = pinned.length > 0;
   $('folders').replaceChildren(...renderFolders(grouped));
   $('foldersEmpty').hidden = grouped.length > 0;
 

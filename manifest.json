@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Anchored Tabs",
-  "version": "0.1.0",
-  "description": "Zen-style Essentials for Helium: closing a pinned or anchored grouped tab resets it to its anchor URL and hibernates it.",
+  "version": "0.2.0",
+  "description": "Zen-style folder tabs for Helium: closing an anchored tab in a folder resets it to its anchor URL and hibernates it.",
   "minimum_chrome_version": "116",
   "permissions": ["tabs", "tabGroups", "storage", "contextMenus", "favicon"],
   "background": { "service_worker": "src/background.js", "type": "module" },
@@ -16,7 +16,7 @@
   "commands": {
     "anchor-tab": {
       "suggested_key": { "default": "Alt+Shift+A" },
-      "description": "Anchor this tab (pins it unless it's in a group)"
+      "description": "Anchor this folder tab"
     },
     "set-anchor-url": {
       "suggested_key": { "default": "Alt+Shift+S" },
