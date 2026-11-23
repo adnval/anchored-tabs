@@ -136,10 +136,33 @@ async function waitFor(fn, ms = 20000) {
   check('anchoring a pinned tab is refused', /Helium/.test(pinErr || ''), pinErr || 'no error');
   await remove(pin.id); await sleep(1000);
   check('closing a pinned tab does not recreate it', !(await tabs(sw, {})).some((t) => t.url === `${B}/pin`));
+
+  // ---- 4b. Normal (unpinned, ungrouped) tabs can be anchored
   const loose = await newTab(`${B}/loose`); await loaded(loose.id);
-  const looseErr = await call(ui, 'anchorTab', { tabId: loose.id }).then(() => null, (e) => e.message);
-  check('anchoring a tab outside a folder is refused', /folder/.test(looseErr || ''), looseErr || 'no error');
+  const looseIndex = (await get(loose.id)).index;
+  const la = await call(ui, 'anchorTab', { tabId: loose.id });
+  let looseNow = await get(loose.id);
+  check('normal tab can be anchored', la.kind === 'tab' && la.url === `${B}/loose`, la.kind);
+  check('…and stays unpinned and outside folders', !looseNow.pinned && looseNow.groupId === -1);
+  await sleep(800);
+  await ev(([id, u]) => chrome.tabs.update(id, { url: u }), [loose.id, `${B}/elsewhere`]); await sleep(800);
+  await activate(home.id); await sleep(150);
+  await activate(loose.id); await sleep(300);
   await remove(loose.id);
+  let lrec = await waitFor(async () => (await tabs(sw, { windowId: win })).find((t) => t.url === `${B}/loose` && t.discarded));
+  check('closed normal tab recreated at anchor URL and hibernated', !!lrec);
+  check('…at the same position, unpinned, outside folders', lrec && lrec.index === looseIndex && !lrec.pinned && lrec.groupId === -1, lrec ? `index ${lrec.index} vs ${looseIndex}` : '');
+  act = (await tabs(sw, { active: true, windowId: win }))[0];
+  check('…and focus went to the MRU loaded tab', act.id === home.id, act.url);
+  // Moving an anchored folder tab out of its folder keeps the anchor.
+  const out = await newTab(`${B}/out`); await loaded(out.id);
+  await ev(([t, g]) => chrome.tabs.group({ tabIds: [t], groupId: g }), [out.id, work]);
+  await call(ui, 'anchorTab', { tabId: out.id }); await sleep(800);
+  await ev((id) => chrome.tabs.ungroup(id), out.id); await sleep(1300);
+  ov = await call(ui, 'overview');
+  check('moving an anchored tab out of its folder keeps the anchor as a normal tab', ov.anchors.some((a) => a.url === `${B}/out` && a.kind === 'tab'));
+  await call(ui, 'closeAndUnanchor', { tabId: out.id }); await sleep(800);
+  check('close for real removes it for good', !(await tabs(sw, {})).some((t) => t.url === `${B}/out`) && !(await call(ui, 'overview')).anchors.some((a) => a.url === `${B}/out`));
   const blank = await newTab('chrome://newtab/');
   await ev(([t, g]) => chrome.tabs.group({ tabIds: [t], groupId: g }), [blank.id, work]); await sleep(800);
   const blankErr = await call(ui, 'anchorTab', { tabId: blank.id }).then(() => null, (e) => e.message);
@@ -162,6 +185,8 @@ async function waitFor(fn, ms = 20000) {
   const folderHeads = await ui.locator('#folders h3').allTextContents();
   const folderRows = await ui.locator('#folders .item').count();
   check('options: no Pinned section', (await ui.locator('#pinned').count()) === 0);
+  const tabRows = await ui.locator('#tabs .item').allTextContents();
+  check('options: Tabs section lists the normal-tab anchor', tabRows.length === 1 && tabRows[0].includes('/loose'), `${tabRows.length} rows`);
   check('options: anchors grouped under the "Work" folder', folderHeads.length === 1 && folderHeads[0] === 'Work' && folderRows === 2, `${folderHeads} rows=${folderRows}`);
   const rowId = await ui.locator('#folders .item', { hasText: '/c' }).first().getAttribute('data-id');
   const row = ui.locator(`#folders .item[data-id="${rowId}"]`);
@@ -198,8 +223,9 @@ async function waitFor(fn, ms = 20000) {
   const after = await tabs(sw, { windowId: win });
   console.log('      tabs after: ', fmt(after));
   act = after.find((t) => t.active);
-  check('no loaded tab left → new tab opened and focused', act && act.groupId === -1, act?.url || act?.pendingUrl);
-  check('hibernated tabs stayed hibernated', after.filter((t) => t.groupId !== -1).every((t) => t.discarded));
+  check('no loaded tab left → new tab opened and focused', act && (act.url || act.pendingUrl).startsWith('chrome://newtab'), act?.url || act?.pendingUrl);
+  const liveAnchorIds = new Set((await ev(async () => (await chrome.storage.session.get('tabMap')).tabMap || {}).then((m) => Object.keys(m).map(Number))));
+  check('hibernated tabs stayed hibernated', after.filter((t) => liveAnchorIds.has(t.id)).length === 2 && after.filter((t) => liveAnchorIds.has(t.id)).every((t) => t.discarded));
 
   // ---- 7. Close the active anchored tab when everything else is hibernated
   const anchored = after.find((t) => t.groupId !== -1);
@@ -209,13 +235,17 @@ async function waitFor(fn, ms = 20000) {
   await remove(anchored.id);
   await sleep(1500);
   act = (await tabs(sw, { windowId: win })).find((t) => t.active);
-  check('closing anchored tab with only hibernated tabs left → new tab', act && act.groupId === -1, act?.url || act?.pendingUrl);
+  check('closing anchored tab with only hibernated tabs left → new tab', act && (act.url || act.pendingUrl).startsWith('chrome://newtab'), act?.url || act?.pendingUrl);
 
   // ---- 8a. Restart with session restore → drifted anchor reset; old pinned anchors dropped
   const fold = await waitFor(async () => (await tabs(sw, {})).find((t) => t.groupId !== -1 && t.discarded));
   await activate(fold.id); await loaded(fold.id);
   await ev(([id, u]) => chrome.tabs.update(id, { url: u }), [fold.id, `${B}/drifted`]);
   await waitFor(async () => (await get(fold.id))?.url === `${B}/drifted`);
+  const looseLive = await waitFor(async () => (await tabs(sw, {})).find((t) => t.url === `${B}/loose`));
+  await activate(looseLive.id); await loaded(looseLive.id);
+  await ev(([id, u]) => chrome.tabs.update(id, { url: u }), [looseLive.id, `${B}/loose-drifted`]);
+  await waitFor(async () => (await get(looseLive.id))?.url === `${B}/loose-drifted`);
   await sleep(1500);
   // Simulate an anchor saved by an older version for a pinned tab.
   await ev(async (u) => {
@@ -231,6 +261,10 @@ async function waitFor(fn, ms = 20000) {
   console.log('      after restart:', fmt(all));
   check('restart: folder anchor reset to anchor URL', !!resetOk);
   check('restart: folder anchor present once', all.filter((t) => t.groupId !== -1).length === 1);
+  const looseReset = await waitFor(async () => (await tabs(sw, {})).find((t) => t.url === `${B}/loose`), 20000);
+  all = await tabs(sw, {});
+  check('restart: normal-tab anchor reset, outside folders', looseReset && looseReset.groupId === -1 && !looseReset.pinned);
+  check('restart: normal-tab anchor present once, nothing left drifted', all.filter((t) => t.url === `${B}/loose`).length === 1 && !all.some((t) => t.url === `${B}/loose-drifted`), fmt(all));
   ov = await call(ui, 'overview');
   check('restart: old pinned anchor dropped, not reopened', !ov.anchors.some((a) => a.kind === 'pinned') && !all.some((t) => t.url === `${B}/legacy`));
   check('restart: old pinned setting dropped', !('autoAnchorPinned' in ov.settings));
@@ -247,6 +281,10 @@ async function waitFor(fn, ms = 20000) {
   console.log('      fresh start:  ', fmt(all));
   check('fresh start: missing anchor recreated in its folder', !!recreated);
   check('fresh start: no pinned tabs reopened', !all.some((t) => t.pinned));
+  const looseFresh = await waitFor(async () => (await tabs(sw, {})).find((t) => t.url === `${B}/loose`), 20000);
+  check('fresh start: normal-tab anchor recreated outside folders', looseFresh && looseFresh.groupId === -1 && !looseFresh.pinned);
+  all = await tabs(sw, {});
+  check('fresh start: unrelated tabs not taken over', all.some((t) => t.url.endsWith('/src/options.html')) && all.filter((t) => t.url === `${B}/loose`).length === 1, fmt(all));
   check('options page: no JS errors', errors.length === 0, errors.join('; '));
   await ctx.close();
 

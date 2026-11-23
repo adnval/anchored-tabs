@@ -240,7 +240,11 @@ async function render() {
   renderPending = false;
   const { settings, anchors } = await send('overview');
   const byPos = (x, y) => (x.pos?.index ?? 0) - (y.pos?.index ?? 0);
+  const loose = anchors.filter((a) => a.kind === 'tab').sort(byPos);
   const grouped = anchors.filter((a) => a.kind === 'group').sort(byPos);
+
+  $('tabs').replaceChildren(...loose.map(renderItem));
+  $('tabsEmpty').hidden = loose.length > 0;
 
   $('folders').replaceChildren(...renderFolders(grouped));
   $('foldersEmpty').hidden = grouped.length > 0;

@@ -32,16 +32,16 @@ async function render() {
   $('badge').classList.toggle('on', !!anchor);
 
   if (anchor) {
-    $('badge').textContent = 'Anchored';
+    $('badge').textContent = anchor.kind === 'group' ? 'Anchored · folder' : 'Anchored · tab';
     if (document.activeElement !== $('url')) $('url').value = anchor.url;
   } else {
     $('badge').textContent = 'Not anchored';
-    const canAnchor = info.tab.grouped && !info.tab.pinned;
-    $('notAnchoredText').textContent = canAnchor
-      ? 'This tab is in a folder. Anchoring keeps it there and uses the current page as its anchor URL.'
-      : info.tab.pinned
-        ? 'Helium resets and unloads pinned tabs on close by itself, so they aren’t anchored here.'
-        : 'Only tabs in a folder can be anchored. Move this tab into a folder first.';
+    const canAnchor = !info.tab.pinned;
+    $('notAnchoredText').textContent = !canAnchor
+      ? 'Helium resets and unloads pinned tabs on close by itself, so they aren’t anchored here.'
+      : info.tab.grouped
+        ? 'This tab is in a folder. Anchoring keeps it there and uses the current page as its anchor URL.'
+        : 'Anchoring keeps this tab where it is and uses the current page as its anchor URL.';
     $('anchor').hidden = !canAnchor;
   }
 }

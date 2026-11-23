@@ -17,7 +17,11 @@
 <body>
 <main>
   <h1>Anchored Tabs</h1>
-  <p class="muted">Folder tabs you anchor keep an <b>anchor URL</b>. Closing one (<kbd>Ctrl</kbd>+<kbd>W</kbd>, middle-click, ×) resets it to that URL and hibernates it, and focus moves to a loaded tab instead. Pinned tabs aren't handled here: Helium does this for them itself.</p>
+  <p class="muted">Tabs you anchor, normal tabs or tabs in folders, keep an <b>anchor URL</b>. Closing one (<kbd>Ctrl</kbd>+<kbd>W</kbd>, middle-click, ×) resets it to that URL and hibernates it, and focus moves to a loaded tab instead. Pinned tabs aren't handled here: Helium does this for them itself.</p>
+
+  <h2>Tabs</h2>
+  <ul id="tabs" class="list" aria-label="Anchored tabs"></ul>
+  <p id="tabsEmpty" class="empty" hidden>Use “Anchor this tab” on a normal tab to add it here.</p>
 
   <h2>Folders</h2>
   <div id="folders"></div>

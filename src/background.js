@@ -1,10 +1,11 @@
 // Anchored Tabs — service worker.
 //
-// An "anchor" is a remembered (URL, slot) pair attached to a tab inside a tab
-// group ("folder"). Closing an anchored tab doesn't really close it: the tab is
-// recreated in the same slot at its anchor URL, hibernated (discarded), and
-// focus moves to a loaded tab instead. Pinned tabs are left alone: Helium
-// gives them this behavior itself.
+// An "anchor" is a remembered (URL, slot) pair attached to a normal tab
+// (kind 'tab') or a tab inside a tab group / "folder" (kind 'group'). Closing
+// an anchored tab doesn't really close it: the tab is recreated in the same
+// slot at its anchor URL, hibernated (discarded), and focus moves to a loaded
+// tab instead. Pinned tabs are left alone: Helium gives them this behavior
+// itself.
 //
 // Chromium gives extensions no way to intercept Ctrl+W / the close button, so
 // "close → reset" is implemented as "tab removed → recreate it". The tab's
@@ -44,7 +45,9 @@ async function getState() {
   const settings = { ...DEFAULT_SETTINGS };
   for (const k of Object.keys(DEFAULT_SETTINGS)) if (k in (local.settings || {})) settings[k] = local.settings[k];
   // Older versions also anchored pinned tabs; Helium handles those now.
-  const anchors = Object.fromEntries(Object.entries(local.anchors || {}).filter(([, a]) => a.kind === 'group'));
+  const anchors = Object.fromEntries(
+    Object.entries(local.anchors || {}).filter(([, a]) => a.kind === 'group' || a.kind === 'tab'),
+  );
   const migrated = Object.keys(anchors).length !== Object.keys(local.anchors || {}).length;
   cache = {
     anchors,
@@ -182,22 +185,25 @@ async function reconcile({ reset, recreateMissing }) {
   }
 
   const candidates = tabs
-    .filter((t) => !t.incognito && !t.pinned && t.groupId !== -1)
+    .filter((t) => !t.incognito && !t.pinned)
     .sort((a, b) => a.windowId - b.windowId || a.index - b.index);
   const remaining = new Set(Object.keys(s.anchors));
   const matched = new Map(); // tabId -> anchor
 
+  // Folder anchors only match folder tabs, normal-tab anchors only normal tabs.
+  const kindMatches = (a, t) => (a.kind === 'group') === (t.groupId !== -1);
   const groupMatches = (a, t) => {
-    if (!a.pos?.groupTitle) return true;
+    if (a.kind !== 'group' || !a.pos?.groupTitle) return true;
     return groupById.get(t.groupId)?.title === a.pos.groupTitle;
   };
+  const sameIndex = (a, t) => a.pos?.index === t.index;
   const pass = (pred) => {
     const ordered = [...remaining]
       .map((id) => s.anchors[id])
       .sort((x, y) => (x.pos?.index ?? 0) - (y.pos?.index ?? 0));
     for (const t of candidates) {
       if (matched.has(t.id)) continue;
-      const a = ordered.find((a) => remaining.has(a.id) && pred(a, t));
+      const a = ordered.find((a) => remaining.has(a.id) && kindMatches(a, t) && pred(a, t));
       if (a) {
         matched.set(t.id, a);
         remaining.delete(a.id);
@@ -205,14 +211,20 @@ async function reconcile({ reset, recreateMissing }) {
     }
   };
   pass((a, t) => groupMatches(a, t) && tabUrl(t) === a.url);
-  pass((a, t) => groupMatches(a, t) && sameHost(tabUrl(t), a.url));
-  // Same slot: same folder, same position inside it.
+  // Normal tabs are only matched by host when they're also in the same spot,
+  // so an unrelated tab on the same site isn't grabbed and reset.
+  pass((a, t) => groupMatches(a, t) && sameHost(tabUrl(t), a.url) && (a.kind === 'group' || sameIndex(a, t)));
+  // Same slot inside the same folder. (Normal tabs never match on position
+  // alone: whatever unrelated tab sits there would be grabbed and reset.)
   const groupStart = new Map();
   for (const t of tabs) {
     if (t.groupId !== -1) groupStart.set(t.groupId, Math.min(groupStart.get(t.groupId) ?? Infinity, t.index));
   }
-  pass((a, t) => groupMatches(a, t) && (a.pos?.groupOffset ?? -1) === t.index - groupStart.get(t.groupId));
-  if (s.settings.autoAnchorGrouped) pass(() => true); // group renamed: by position only
+  pass(
+    (a, t) =>
+      a.kind === 'group' && groupMatches(a, t) && (a.pos?.groupOffset ?? -1) === t.index - groupStart.get(t.groupId),
+  );
+  if (s.settings.autoAnchorGrouped) pass((a) => a.kind === 'group'); // group renamed: by position only
 
   const toReset = [];
   for (const t of candidates) {
@@ -220,7 +232,7 @@ async function reconcile({ reset, recreateMissing }) {
     if (a) {
       s.tabMap[t.id] = a.id;
       if (reset && a.url && tabUrl(t) !== a.url) toReset.push([t, a]);
-    } else if (s.settings.autoAnchorGrouped && !isBlankUrl(tabUrl(t))) {
+    } else if (t.groupId !== -1 && s.settings.autoAnchorGrouped && !isBlankUrl(tabUrl(t))) {
       createAnchor(s, t);
     }
   }
@@ -273,7 +285,7 @@ async function reconcile({ reset, recreateMissing }) {
 function createAnchor(s, tab, url = tabUrl(tab)) {
   const anchor = {
     id: crypto.randomUUID(),
-    kind: 'group',
+    kind: tab.groupId !== -1 ? 'group' : 'tab',
     url,
     title: tab.title || '',
     favIconUrl: tab.favIconUrl || '',
@@ -307,6 +319,18 @@ async function findGroup(windowId, pos) {
 /** Open a fresh tab for `anchor` in its old slot. Returns the new tab id. */
 async function recreate(s, anchor, windowId) {
   const pos = anchor.pos || {};
+  if (anchor.kind === 'tab') {
+    const count = (await chrome.tabs.query({ windowId })).length;
+    const tab = await chrome.tabs.create({
+      windowId,
+      url: anchor.url,
+      active: false,
+      index: Math.min(pos.index ?? count, count),
+    });
+    register(s, tab.id, anchor.id);
+    scheduleSnapshot();
+    return tab.id;
+  }
   const groupId = await findGroup(windowId, pos);
   const tabs = await chrome.tabs.query({ windowId });
   let index = Math.min(pos.index ?? tabs.length, tabs.length);
@@ -578,8 +602,9 @@ async function checkMembership(tabId) {
   const inGroup = !tab.pinned && tab.groupId !== -1;
 
   if (anchor) {
-    // Left its folder, or got pinned (Helium handles pinned tabs itself).
-    if (!inGroup) removeAnchor(s, anchorId);
+    const kind = inGroup ? 'group' : 'tab';
+    if (tab.pinned) removeAnchor(s, anchorId); // Helium handles pinned tabs itself
+    else if (anchor.kind !== kind) anchor.kind = kind; // moved into or out of a folder
     else return;
   } else if (inGroup && s.settings.autoAnchorGrouped && !isBlankUrl(tabUrl(tab))) {
     createAnchor(s, tab);
@@ -700,11 +725,10 @@ chrome.tabGroups.onUpdated.addListener(scheduleSnapshot);
 // Actions (popup, options page, context menu, keyboard shortcuts)
 // ---------------------------------------------------------------------------
 
-/** Anchor a tab that's inside a folder (tab group). */
+/** Anchor a normal tab or a tab in a folder (not a pinned tab). */
 async function anchorTab(s, tabId, url) {
   const tab = await chrome.tabs.get(tabId);
   if (tab.pinned) throw new Error('Helium already resets pinned tabs');
-  if (tab.groupId === -1) throw new Error('Move this tab into a folder first');
   if (isBlankUrl(url || tabUrl(tab))) throw new Error('Open a page in this tab first');
   const existing = s.anchors[anchorIdFor(s, tabId)];
   if (existing) {
@@ -851,7 +875,7 @@ const actions = {
     if (!data || !Array.isArray(data.anchors)) throw new Error('File does not contain anchors');
     let added = 0;
     for (const raw of data.anchors) {
-      if (!raw || raw.kind !== 'group') continue; // pinned anchors are Helium's job now
+      if (!raw || (raw.kind !== 'group' && raw.kind !== 'tab')) continue; // pinned anchors are Helium's job now
       const url = normalizeUrl(raw.url);
       const id = typeof raw.id === 'string' && raw.id ? raw.id : crypto.randomUUID();
       s.anchors[id] = {
